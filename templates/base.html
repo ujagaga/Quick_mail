@@ -9,6 +9,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Quick Mail</title>
     <link rel="stylesheet" type="text/css" href="/static/base.css">
+    <link rel="stylesheet" href="/static/css/fontawesome.min.css">
+    <link rel="stylesheet" href="/static/css/solid.min.css">
     <link rel="icon" href="/static/favicon.ico">
 </head>
 
@@ -20,16 +22,16 @@
                 <div class="container">
                     <div id="navbarMenuHeroA" class="navbar-menu">
                         {% if request.endpoint != 'home' %}
-                        <a href="/" class="navbar-item">Home</a>
+                        <a href="/" class="navbar-item" title="Home"><i class="fa-solid fa-house"></i></a>
                         {% endif %}
                         {% if authorized %}
                         {% if request.endpoint != 'admin' %}
-                        <a href="/admin" class="navbar-item">Administration</a>
+                        <a href="/admin" class="navbar-item" title="Users"><i class="fa-solid fa-user"></i></a>
                         {% endif %}
-                        <a href="/logout" class="navbar-item">Log out</a>
+                        <a href="/logout" class="navbar-item" title="Log out"><i class="fa-solid fa-right-from-bracket"></i></a>
                         {% else %}
                         {% if request.endpoint != 'login' %}
-                        <a href="/login" class="navbar-item">Log in</a>
+                        <a href="/login" class="navbar-item" title="Log in"><i class="fa-solid fa-right-to-bracket"></i></a>
                         {% endif %}
                         {% endif %}
                     </div>
