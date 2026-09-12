@@ -10,6 +10,5 @@ DB_FILE = "users.db"
 CLIENT_SECRETS_FILE = "client_secret.json"  # Google OAuth client secrets, download from Google Cloud Console
 USE_MANUAL_OAUTH = False  # True uses manual_oauth.py (only needs "requests") instead of Authlib (needs "cryptography")
 FLASK_APP_SECRET_KEY = "9OLWxND4o83j4K4iuopOdsfds_any_random_string"
-MAX_RECIPIENT_HISTORY = 10 # Max number of allowed recipients to combat bots
-MIN_TIMEOUT = 60    # Wait at least this long before accepting next send mail request from same user to prevent spamming
+MIN_WAIT_TIME = 120    # Minimum seconds between emails from the same user to prevent spamming (enforced floor: 120s / 2min)
 USE_MANUAL_OAUTH = True

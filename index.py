@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import os
 from flask import Flask, request, render_template, flash, redirect, abort, session
-from config import (ADMIN_EMAIL, FLASK_APP_SECRET_KEY, MAX_RECIPIENT_HISTORY, MIN_TIMEOUT, CLIENT_SECRETS_FILE,
-                    USE_MANUAL_OAUTH)
+from config import ADMIN_EMAIL, FLASK_APP_SECRET_KEY, CLIENT_SECRETS_FILE, USE_MANUAL_OAUTH
 from helper import (send_email, generate_token, is_valid_email, init_db, get_user_from_db,
-                    add_user, delete_user, update_user)
+                    add_user, delete_user, update_user, MIN_WAIT_TIME)
 import json
 from time import time
 
@@ -126,14 +125,14 @@ def logout():
 @app.route("/", methods=["GET"])
 def home():
     user = check_auth()
-    return render_template('home.html', authorized=bool(user), user=user)
+    return render_template('home.html', authorized=bool(user), user=user, min_wait_time=MIN_WAIT_TIME)
 
 
 @app.route("/send", methods=["GET", "POST"])
 def send():
     # Get parameters from request
     data = request.args if request.method == "GET" else request.form
-    token, msg, recipient, subject = data.get("token"), data.get("msg"), data.get("to"), data.get("sub", "")
+    token, msg, recipient, subject = data.get("token"), data.get("msg"), data.get("to"), data.get("sub")
 
     if not token:
         abort(401, description="Missing token parameter")
@@ -144,33 +143,26 @@ def send():
 
     last_timestamp = int(user["timestamp"])
     time_since_last_mail = time() - last_timestamp
-    if time_since_last_mail < MIN_TIMEOUT:
-        abort(406, description=f"Please wait another {int(MIN_TIMEOUT - time_since_last_mail)}s before trying again")
+    if time_since_last_mail < MIN_WAIT_TIME:
+        abort(406, description=f"Please wait another {int(MIN_WAIT_TIME - time_since_last_mail)}s before trying again")
 
     if not msg:
         abort(400, description='Missing message to email as "msg" parameter')
 
-    # Load allowed recipients
-    try:
-        allowed_recipients = json.loads(user.get("recipients", "[]"))
-    except (json.JSONDecodeError, TypeError):
-        allowed_recipients = []
+    if not recipient:
+        abort(400, description='Missing recipient email as "to" parameter')
 
-    # Process recipients
+    if not subject:
+        abort(400, description='Missing subject as "sub" parameter')
+
     accepted_recipients, rejected_recipients = [], []
-    requested_recipients = [r.strip() for r in recipient.split(",")] if recipient else allowed_recipients
-
-    for r in requested_recipients:
-        if not is_valid_email(r):
-            rejected_recipients.append(r)
-        elif r in allowed_recipients or len(allowed_recipients) < MAX_RECIPIENT_HISTORY:
+    for r in [r.strip() for r in recipient.split(",")]:
+        if is_valid_email(r):
             accepted_recipients.append(r)
-            if r not in allowed_recipients:
-                allowed_recipients.append(r)
         else:
             rejected_recipients.append(r)
 
-    update_user(user["email"], recipients=json.dumps(allowed_recipients))
+    update_user(user["email"])
 
     if not accepted_recipients:
         abort(400, description=f"No valid recipients found. Rejected: {json.dumps(rejected_recipients)}")
@@ -182,7 +174,7 @@ def send():
     # Response message
     ret_message = "OK"
     if rejected_recipients:
-        ret_message += f". Some recipients were rejected: {json.dumps(rejected_recipients)}. They are either malformed or exceeded the {MAX_RECIPIENT_HISTORY} limit."
+        ret_message += f". Some recipients were rejected as malformed: {json.dumps(rejected_recipients)}."
 
     return ret_message
 
@@ -216,10 +208,8 @@ def admin():
                     f"\n\nTo send an e-mail, you can use the following URL example:\n"
                     f'{request.host_url}send?token={user["token"]}&msg="Some test message"&to={email}&sub="Test mail subject"'
                     f"\n\nYou can also use a POST request with parameters in the request body."
-                    f"\nOnce you send an e-mail, the recipient will be added to your recipient list. "
-                    f'Up to {MAX_RECIPIENT_HISTORY} recipients will be saved, so if you omit the "to" parameter,'
-                    f'the recipient list will be populated from the history. While this simplifies sending mail for you, '
-                    f'it also prevents bots from using this service to spam a large number of e-mail addresses.'
+                    f'\nThe "to" and "sub" parameters are required.'
+                    f"\nYou must wait at least {MIN_WAIT_TIME} seconds between emails."
                     )
             send_email(
                 recipient=email,

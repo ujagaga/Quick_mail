@@ -18,18 +18,16 @@
     <div class="story">
         <h1>How It Works</h1>
         <p>Sign in with Google to get your device token.<br>
-            To send an e-mail, you simply make an HTTP GET or HTTP POST request to <br>"{{ request.url.replace("/cgi-bin/cgi_serve.py", "") }}send" with parameters:</p>
+            To send an e-mail, you simply make an HTTP GET or HTTP POST request to <br>"{{ request.url.replace("/cgi-bin/cgi_serve.py", "") }}send" with parameters, all required:</p>
         <ul>
             <li>token=&lt;Your user token&gt;</li>
             <li>msg=&lt;Html safe text message to send&gt;</li>
-            <li>to=[Optional recipient email. If not supplied, history is used]</li>
-            <li>sub=[Optional e-mail subject.]</li>
+            <li>to=&lt;Recipient e-mail address&gt;</li>
+            <li>sub=&lt;E-mail subject&gt;</li>
         </ul>
 
-        <p>After sending at least one e-mail to save recipient history, the simplest URL to use would be:</p>
-        <p>{{ request.url.replace("/cgi-bin/cgi_serve.py", "") }}send?token=your_token&msg=Url_safe_text_message</p>
-        <p>where the recipient list is used from history.</p>
-        <p>To send to multiple addresses, you may use a comma separated list of e-mails for "to" parameter.</p>
+        <p>To send to multiple addresses, you may use a comma separated list of e-mails for the "to" parameter.</p>
+        <p>To prevent spam, you must wait at least {{ min_wait_time }} seconds between emails.</p>
         <br>
         <a href="https://github.com/ujagaga/Quick_mail">This is an open source solution you may use as you wish.</a>
     </div>

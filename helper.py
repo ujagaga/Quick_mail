@@ -1,12 +1,14 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS, DB_FILE, ADMIN_EMAIL, MAX_RECIPIENT_HISTORY
+from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS, DB_FILE, ADMIN_EMAIL, MIN_WAIT_TIME as _CONFIGURED_MIN_WAIT_TIME
 import sqlite3
 import re
 from time import time
 import os
 import uuid
+
+MIN_WAIT_TIME = max(_CONFIGURED_MIN_WAIT_TIME, 120)  # enforce a 2min floor regardless of config
 
 '''
 Sends an email using configured credentials. 
@@ -57,7 +59,6 @@ def init_db():
                     email TEXT UNIQUE NOT NULL,
                     status TEXT NOT NULL,
                     token TEXT,
-                    recipients TEXT,
                     timestamp INTEGER
                 )
             """
@@ -76,10 +77,8 @@ def init_db():
                     f"\n\nTo send an e-mail, you can use the following URL example:\n"
                     f'http://quickmail.yourdomain.com/send?token={token}&msg="Some test message"&to=recipient_email&sub="Test mail subject"'
                     f"\n\nYou can also use a POST request with parameters in the request body."
-                    f"\nOnce you send an e-mail, the recipient will be added to your recipient list. "
-                    f'Up to {MAX_RECIPIENT_HISTORY} recipients will be saved, so if you omit the "to" parameter,'
-                    f'the recipient list will be populated from the history. While this simplifies sending mail for you, '
-                    f'it also prevents bots from using this service to spam a large number of e-mail addresses.'
+                    f'\nThe "to" and "sub" parameters are required.'
+                    f"\nYou must wait at least {MIN_WAIT_TIME} seconds between emails."
                     )
 
             send_email(
@@ -142,17 +141,13 @@ def delete_user(email):
         conn.commit()
 
 
-def update_user(email, status=None, recipients=None):
+def update_user(email, status=None):
     timestamp = int(time())  # Get the current epoch time
 
-    if status is not None and recipients is not None:
-        sql_query = f"UPDATE users SET status = '{status}', recipients = '{recipients}', timestamp = {timestamp} WHERE email = '{email}'"
-    elif status is not None:
+    if status is not None:
         sql_query = f"UPDATE users SET status = '{status}', timestamp = {timestamp} WHERE email = '{email}'"
-    elif recipients is not None:
-        sql_query = f"UPDATE users SET recipients = '{recipients}', timestamp = {timestamp} WHERE email = '{email}'"
     else:
-        return False
+        sql_query = f"UPDATE users SET timestamp = {timestamp} WHERE email = '{email}'"
 
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
