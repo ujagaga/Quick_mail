@@ -25,7 +25,7 @@
                         <a href="/" class="navbar-item" title="Home"><i class="fa-solid fa-house"></i></a>
                         {% endif %}
                         {% if authorized %}
-                        {% if request.endpoint != 'admin' %}
+                        {% if user.status == 'admin' and request.endpoint != 'admin' %}
                         <a href="/admin" class="navbar-item" title="Users"><i class="fa-solid fa-user"></i></a>
                         {% endif %}
                         <a href="/logout" class="navbar-item" title="Log out"><i class="fa-solid fa-right-from-bracket"></i></a>

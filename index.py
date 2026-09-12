@@ -230,7 +230,7 @@ def admin():
         return redirect('/admin')
 
     users = get_user_from_db(exclude=administrator['email'])
-    return render_template('admin.html', authorized=True, users=users)
+    return render_template('admin.html', authorized=True, user=administrator, users=users)
 
 
 if __name__ == "__main__":
