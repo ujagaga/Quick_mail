@@ -1,55 +1,37 @@
-<!-- templates/base.html -->
-
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Quick Mail</title>
-    <link rel="stylesheet" type="text/css" href="/static/base.css">
+    <title>{% block title %}Quick Mail{% endblock %}</title>
+    {# Serve assets directly from the web root, outside the CGI script mount. #}
+    <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="/static/css/fontawesome.min.css">
+    <link rel="stylesheet" href="/static/css/solid.min.css">
     <link rel="icon" href="/static/favicon.ico">
 </head>
-
 <body>
-    <section class="hero is-primary is-fullheight">
-
-        <div class="hero-head">
-            <nav class="navbar">
-                <div class="container">
-                    <div id="navbarMenuHeroA" class="navbar-menu">
-                        {% if request.endpoint != 'home' %}
-                        <a href="/" class="navbar-item">Home</a>
-                        {% endif %}
-                        {% if authorized %}
-                        {% if request.endpoint != 'admin' %}
-                        <a href="/admin" class="navbar-item">Administration</a>
-                        {% endif %}
-                        {% if request.endpoint != 'clear_history' %}
-                        <a href="/clear_history" class="navbar-item">Recipients</a>
-                        {% endif %}
-                        <a href="/logout" class="navbar-item">Log out</a>
-                        {% else %}
-                        {% if request.endpoint != 'subscribe' %}
-                        <a href="/subscribe" class="navbar-item">Subscribe</a>
-                        {% endif %}
-                        {% if request.endpoint != 'login' %}
-                        <a href="/login" class="navbar-item">Log in</a>
-                        {% endif %}
-                        {% endif %}
-                    </div>
-                </div>
-            </nav>
-        </div>
-
-        <div class="hero-body">
-            <div class="container has-text-centered">
-               {% block content %}
-               {% endblock %}
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+        <nav class="container navigation" aria-label="Main navigation">
+            <a class="brand" href="/"><span class="brand-icon"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></span>Quick Mail<span class="brand-dot">.</span></a>
+            <div class="nav-links">
+                {% if authorized %}
+                    {% if user.status == 'admin' %}<a class="nav-action" href="/admin" aria-label="Users" title="Users" {% if request.endpoint == 'admin' %}aria-current="page"{% endif %}><i class="fa-solid fa-users" aria-hidden="true"></i></a>{% endif %}
+                    <a class="nav-action" href="/logout" aria-label="Log out" title="Log out"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i></a>
+                    <span class="avatar nav-avatar" role="img" aria-label="Signed in as {{ user.email }}" title="{{ user.email }}">{{ user.email[0]|upper }}{% if user.picture_url %}<img src="{{ user.picture_url }}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">{% endif %}</span>
+                {% else %}
+                    <a class="nav-action" href="/login" aria-label="Sign in" title="Sign in" {% if request.endpoint == 'login' %}aria-current="page"{% endif %}><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></a>
+                {% endif %}
             </div>
-        </div>
-    </section>
+        </nav>
+    </header>
+    <main id="main" class="container main-content">
+        {% with messages = get_flashed_messages() %}
+            {% for message in messages %}<div class="notification" role="status"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><span>{{ message }}</span></div>{% endfor %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+    <footer class="container site-footer"><span>Small devices. A simple way to send.</span><a href="https://github.com/ujagaga/Quick_mail" target="_blank" rel="noopener">Open source on GitHub <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a></footer>
 </body>
-
 </html>

@@ -1,14 +1,14 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS, DB_FILE, ADMIN_EMAIL, MAX_RECIPIENT_HISTORY
+from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS, DB_FILE, ADMIN_EMAIL, MIN_WAIT_TIME as _CONFIGURED_MIN_WAIT_TIME
 import sqlite3
-import random
-import string
 import re
 from time import time
 import os
-import hashlib
+import uuid
+
+MIN_WAIT_TIME = max(_CONFIGURED_MIN_WAIT_TIME, 120)  # enforce a 2min floor regardless of config
 
 '''
 Sends an email using configured credentials. 
@@ -37,35 +37,8 @@ def send_email(recipient, subject, body):
         print(f"Error: {e}")
 
 
-def md5_encode(string_data):
-    """Encodes a string using MD5 and returns the hexadecimal digest.
-    Args:
-        string_data: The string to encode.  It will be encoded as UTF-8.
-    Returns:
-        The MD5 hash as a hexadecimal string, or None if an error occurs.
-    """
-    try:
-        encoded_string = string_data.encode('utf-8')
-        md5_hash = hashlib.md5()
-        md5_hash.update(encoded_string)
-        hex_digest = md5_hash.hexdigest()
-
-        return hex_digest
-
-    except Exception as e:
-        print(f"Error during MD5 encoding: {e}")
-        return None
-
-
 def generate_token():
-    random_str = random.choices(string.ascii_letters, k=16)
-    unique_str = f"{random_str}{time()}"
-
-    return md5_encode(unique_str)
-
-
-def generate_captcha_text():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return str(uuid.uuid4())
 
 
 def is_valid_email(email):
@@ -75,7 +48,11 @@ def is_valid_email(email):
 
 def init_db():
     if os.path.exists(DB_FILE):
-        # Database file '{DB_FILE}' already exists. Aborting initialization.
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            columns = {row[1] for row in conn.execute('PRAGMA table_info(users)')}
+            if 'picture_url' not in columns:
+                conn.execute('ALTER TABLE users ADD COLUMN picture_url TEXT')
         return
 
     try:
@@ -86,8 +63,8 @@ def init_db():
                     email TEXT UNIQUE NOT NULL,
                     status TEXT NOT NULL,
                     token TEXT,
-                    recipients TEXT,
-                    timestamp INTEGER
+                    timestamp INTEGER,
+                    picture_url TEXT
                 )
             """
             cursor = conn.cursor()
@@ -105,10 +82,8 @@ def init_db():
                     f"\n\nTo send an e-mail, you can use the following URL example:\n"
                     f'http://quickmail.yourdomain.com/send?token={token}&msg="Some test message"&to=recipient_email&sub="Test mail subject"'
                     f"\n\nYou can also use a POST request with parameters in the request body."
-                    f"\nOnce you send an e-mail, the recipient will be added to your recipient list. "
-                    f'Up to {MAX_RECIPIENT_HISTORY} recipients will be saved, so if you omit the "to" parameter,'
-                    f'the recipient list will be populated from the history. While this simplifies sending mail for you, '
-                    f'it also prevents bots from using this service to spam a large number of e-mail addresses.'
+                    f'\nThe "to" and "sub" parameters are required.'
+                    f"\nYou must wait at least {MIN_WAIT_TIME} seconds between emails."
                     )
 
             send_email(
@@ -120,10 +95,12 @@ def init_db():
         pass
 
 
-def get_user_from_db(email=None, token=None, exclude=None):
+def get_user_from_db(email=None, token=None, exclude=None, include_pending=False):
     one = True
     if email:
         sql_query = "SELECT * FROM users WHERE email = ? AND status != 'pending'"
+        if include_pending:
+            sql_query = "SELECT * FROM users WHERE email = ?"
         params = (email,)
     elif token:
         sql_query = "SELECT * FROM users WHERE token = ? AND status != 'pending'"
@@ -150,22 +127,12 @@ def get_user_from_db(email=None, token=None, exclude=None):
             return [dict(row) for row in data]  # Convert each row to dict
 
 
-def get_pending_user_count():
-    sql_query = "SELECT COUNT(*) FROM users WHERE status = 'pending'"
-
-    with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute(sql_query)
-        count = cursor.fetchone()[0]  # Get the count directly
-        return count
-
-
-def add_user(email, token):
+def add_user(email, token, picture_url=None):
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute("INSERT INTO users (email, status, token, timestamp) VALUES (?, ?, ?, ?)",
-                           (email, "pending", token, int(time())))
+            cursor.execute("INSERT INTO users (email, status, token, timestamp, picture_url) VALUES (?, ?, ?, ?, ?)",
+                           (email, "pending", token, int(time()), picture_url))
             conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -181,17 +148,13 @@ def delete_user(email):
         conn.commit()
 
 
-def update_user(email, status=None, recipients=None):
+def update_user(email, status=None):
     timestamp = int(time())  # Get the current epoch time
 
-    if status is not None and recipients is not None:
-        sql_query = f"UPDATE users SET status = '{status}', recipients = '{recipients}', timestamp = {timestamp} WHERE email = '{email}'"
-    elif status is not None:
+    if status is not None:
         sql_query = f"UPDATE users SET status = '{status}', timestamp = {timestamp} WHERE email = '{email}'"
-    elif recipients is not None:
-        sql_query = f"UPDATE users SET recipients = '{recipients}', timestamp = {timestamp} WHERE email = '{email}'"
     else:
-        return False
+        sql_query = f"UPDATE users SET timestamp = {timestamp} WHERE email = '{email}'"
 
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
@@ -199,3 +162,8 @@ def update_user(email, status=None, recipients=None):
         conn.commit()
 
     return True
+
+
+def update_user_picture(email, picture_url):
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute("UPDATE users SET picture_url = ? WHERE email = ?", (picture_url, email))
