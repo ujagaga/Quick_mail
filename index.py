@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 import os
-from flask import Flask, request, render_template, flash, redirect, abort, session, send_file
+from flask import Flask, request, render_template, flash, redirect, abort, session
 from config import (ADMIN_EMAIL, FLASK_APP_SECRET_KEY, MAX_RECIPIENT_HISTORY, MIN_TIMEOUT, CLIENT_SECRETS_FILE,
                     USE_MANUAL_OAUTH)
-from helper import (send_email, generate_captcha_text, generate_token, is_valid_email, init_db, get_user_from_db,
+from helper import (send_email, generate_token, is_valid_email, init_db, get_user_from_db,
                     add_user, delete_user, update_user)
 import json
-from captcha.image import ImageCaptcha
-import io
 from time import time
 
 app = Flask(__name__)
@@ -61,7 +59,7 @@ def check_auth():
 @app.before_request
 def check_token():
     init_db()
-    excluded_routes = ['home', 'login', 'authorize', 'oauth2callback', 'static', 'send', 'generate_captcha']  # Add routes to exclude
+    excluded_routes = ['home', 'login', 'authorize', 'oauth2callback', 'static', 'send']  # Add routes to exclude
     if request.endpoint in excluded_routes:
         return  # Skip checking the session
 
@@ -118,17 +116,6 @@ def oauth2callback():
 def logout():
     session.clear()
     return redirect('/')
-
-
-@app.route("/captcha")
-def generate_captcha():
-    captcha_text = generate_captcha_text()
-    session["captcha"] = captcha_text  # Store in session
-    print(captcha_text)
-    image = ImageCaptcha()
-    data = image.generate(captcha_text)
-
-    return send_file(io.BytesIO(data.read()), mimetype="image/png")
 
 
 @app.route("/", methods=["GET"])
@@ -193,30 +180,6 @@ def send():
         ret_message += f". Some recipients were rejected: {json.dumps(rejected_recipients)}. They are either malformed or exceeded the {MAX_RECIPIENT_HISTORY} limit."
 
     return ret_message
-
-
-@app.route("/clear_history", methods=["GET", "POST"])
-def clear_history():
-    user = check_auth()
-    if not user:
-        return redirect('/login')
-
-    if request.method == "POST":
-        user_input = request.form.get("captcha")
-        if user_input and user_input.upper() == session.get("captcha"):
-            update_user(email=user["email"], recipients=[])
-            flash("History cleared!")
-            user = get_user_from_db(email=user["email"])
-        else:
-            flash("Invalid CAPTCHA. Try again!")
-
-    saved_recipients = user.get("recipients", "[]")  # Default to an empty list
-    try:
-        allowed_recipient_list = json.loads(saved_recipients)
-    except (json.JSONDecodeError, TypeError):
-        allowed_recipient_list = []
-
-    return render_template('clear_history.html', authorized=True, recipients=allowed_recipient_list)
 
 
 @app.route("/admin", methods=["GET"])

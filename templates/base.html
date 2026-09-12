@@ -26,9 +26,6 @@
                         {% if request.endpoint != 'admin' %}
                         <a href="/admin" class="navbar-item">Administration</a>
                         {% endif %}
-                        {% if request.endpoint != 'clear_history' %}
-                        <a href="/clear_history" class="navbar-item">Recipients</a>
-                        {% endif %}
                         <a href="/logout" class="navbar-item">Log out</a>
                         {% else %}
                         {% if request.endpoint != 'login' %}

@@ -64,10 +64,6 @@ def generate_token():
     return md5_encode(unique_str)
 
 
-def generate_captcha_text():
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-
-
 def is_valid_email(email):
     pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
     return bool(re.match(pattern, email))
