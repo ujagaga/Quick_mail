@@ -4,10 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Quick Mail{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/fontawesome.min.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/solid.min.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    {# Serve assets directly from the web root, outside the CGI script mount. #}
+    <link rel="stylesheet" href="/static/base.css">
+    <link rel="stylesheet" href="/static/css/fontawesome.min.css">
+    <link rel="stylesheet" href="/static/css/solid.min.css">
+    <link rel="icon" href="/static/favicon.ico">
 </head>
 <body>
     <a class="skip-link" href="#main">Skip to content</a>
