@@ -3,12 +3,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from config import SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS, DB_FILE, ADMIN_EMAIL, MAX_RECIPIENT_HISTORY
 import sqlite3
-import random
-import string
 import re
 from time import time
 import os
-import hashlib
+import uuid
 
 '''
 Sends an email using configured credentials. 
@@ -37,31 +35,8 @@ def send_email(recipient, subject, body):
         print(f"Error: {e}")
 
 
-def md5_encode(string_data):
-    """Encodes a string using MD5 and returns the hexadecimal digest.
-    Args:
-        string_data: The string to encode.  It will be encoded as UTF-8.
-    Returns:
-        The MD5 hash as a hexadecimal string, or None if an error occurs.
-    """
-    try:
-        encoded_string = string_data.encode('utf-8')
-        md5_hash = hashlib.md5()
-        md5_hash.update(encoded_string)
-        hex_digest = md5_hash.hexdigest()
-
-        return hex_digest
-
-    except Exception as e:
-        print(f"Error during MD5 encoding: {e}")
-        return None
-
-
 def generate_token():
-    random_str = random.choices(string.ascii_letters, k=16)
-    unique_str = f"{random_str}{time()}"
-
-    return md5_encode(unique_str)
+    return str(uuid.uuid4())
 
 
 def is_valid_email(email):
