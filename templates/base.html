@@ -19,6 +19,7 @@
                 {% if authorized %}
                     {% if user.status == 'admin' %}<a class="nav-action" href="/admin" aria-label="Users" title="Users" {% if request.endpoint == 'admin' %}aria-current="page"{% endif %}><i class="fa-solid fa-users" aria-hidden="true"></i></a>{% endif %}
                     <a class="nav-action" href="/logout" aria-label="Log out" title="Log out"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i></a>
+                    <span class="avatar nav-avatar" role="img" aria-label="Signed in as {{ user.email }}" title="{{ user.email }}">{{ user.email[0]|upper }}{% if user.picture_url %}<img src="{{ user.picture_url }}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">{% endif %}</span>
                 {% else %}
                     <a class="nav-action" href="/login" aria-label="Sign in" title="Sign in" {% if request.endpoint == 'login' %}aria-current="page"{% endif %}><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i></a>
                 {% endif %}

@@ -653,6 +653,12 @@ code,pre {
     font-weight:700;
 }
 
+.avatar.nav-avatar {
+    width:44px;
+    height:44px;
+    font-size:16px;
+}
+
 .avatar img {
     position:absolute;
     inset:0;
