@@ -48,7 +48,11 @@ def is_valid_email(email):
 
 def init_db():
     if os.path.exists(DB_FILE):
-        # Database file '{DB_FILE}' already exists. Aborting initialization.
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            columns = {row[1] for row in conn.execute('PRAGMA table_info(users)')}
+            if 'picture_url' not in columns:
+                conn.execute('ALTER TABLE users ADD COLUMN picture_url TEXT')
         return
 
     try:
@@ -59,7 +63,8 @@ def init_db():
                     email TEXT UNIQUE NOT NULL,
                     status TEXT NOT NULL,
                     token TEXT,
-                    timestamp INTEGER
+                    timestamp INTEGER,
+                    picture_url TEXT
                 )
             """
             cursor = conn.cursor()
@@ -90,10 +95,12 @@ def init_db():
         pass
 
 
-def get_user_from_db(email=None, token=None, exclude=None):
+def get_user_from_db(email=None, token=None, exclude=None, include_pending=False):
     one = True
     if email:
         sql_query = "SELECT * FROM users WHERE email = ? AND status != 'pending'"
+        if include_pending:
+            sql_query = "SELECT * FROM users WHERE email = ?"
         params = (email,)
     elif token:
         sql_query = "SELECT * FROM users WHERE token = ? AND status != 'pending'"
@@ -120,12 +127,12 @@ def get_user_from_db(email=None, token=None, exclude=None):
             return [dict(row) for row in data]  # Convert each row to dict
 
 
-def add_user(email, token):
+def add_user(email, token, picture_url=None):
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
         try:
-            cursor.execute("INSERT INTO users (email, status, token, timestamp) VALUES (?, ?, ?, ?)",
-                           (email, "pending", token, int(time())))
+            cursor.execute("INSERT INTO users (email, status, token, timestamp, picture_url) VALUES (?, ?, ?, ?, ?)",
+                           (email, "pending", token, int(time()), picture_url))
             conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -155,3 +162,8 @@ def update_user(email, status=None):
         conn.commit()
 
     return True
+
+
+def update_user_picture(email, picture_url):
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute("UPDATE users SET picture_url = ? WHERE email = ?", (picture_url, email))

@@ -3,7 +3,7 @@ import os
 from flask import Flask, request, render_template, flash, redirect, abort, session
 from config import ADMIN_EMAIL, FLASK_APP_SECRET_KEY, CLIENT_SECRETS_FILE, USE_MANUAL_OAUTH
 from helper import (send_email, generate_token, is_valid_email, init_db, get_user_from_db,
-                    add_user, delete_user, update_user, MIN_WAIT_TIME)
+                    add_user, delete_user, update_user, update_user_picture, MIN_WAIT_TIME)
 import json
 from time import time
 
@@ -38,7 +38,7 @@ if os.path.isfile(client_secrets_path):
                 authorize_url=client_secrets['auth_uri'],
                 api_base_url='https://www.googleapis.com/oauth2/v1/',
                 userinfo_endpoint='https://www.googleapis.com/oauth2/v3/userinfo',
-                client_kwargs={'scope': 'email'},
+                client_kwargs={'scope': 'email profile'},
                 server_metadata_url='https://accounts.google.com/.well-known/openid-configuration'
             )
     except Exception as e:
@@ -90,12 +90,16 @@ def authorize():
 @app.route("/oauth2callback", methods=["GET"])
 def oauth2callback():
     google.authorize_access_token()
-    email = google.get('userinfo').json()['email']
+    profile = google.get('userinfo').json()
+    email = profile['email']
+    picture_url = profile.get('picture')
+    if not isinstance(picture_url, str) or not picture_url.startswith('https://'):
+        picture_url = None
 
-    user = get_user_from_db(email=email)
+    user = get_user_from_db(email=email, include_pending=True)
     if not user:
         token = generate_token()
-        add_user(email, token)
+        add_user(email, token, picture_url)
         send_email(
             recipient=ADMIN_EMAIL,
             subject="New user signed up",
@@ -104,6 +108,9 @@ def oauth2callback():
         )
         flash("Account created. You will be contacted by the administrator as soon as possible.")
         return redirect('/login')
+
+    if picture_url:
+        update_user_picture(email, picture_url)
 
     if user['status'] == 'pending':
         flash("Your account is still awaiting administrator approval.")

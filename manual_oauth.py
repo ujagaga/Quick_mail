@@ -44,7 +44,7 @@ class ManualGoogleOAuth:
             "client_id": self.client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
-            "scope": "email",
+            "scope": "email profile",
             "state": state,
         }
         return redirect(f"{AUTH_URL}?{urlencode(params)}")
