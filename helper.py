@@ -43,6 +43,36 @@ def generate_token():
     return str(uuid.uuid4())
 
 
+def ensure_unique_tokens(conn):
+    """Upgrade existing databases without changing any device credentials."""
+    try:
+        conn.execute('CREATE UNIQUE INDEX IF NOT EXISTS users_token_unique ON users(token)')
+    except sqlite3.IntegrityError as exc:
+        raise RuntimeError(
+            "Cannot enforce token uniqueness: existing accounts share a token. "
+            "Assign distinct tokens to those accounts before restarting."
+        ) from exc
+
+
+def insert_user(conn, email, status, token=None, picture_url=None):
+    """Return the stored token, or None if the email already has an account."""
+    token = token or generate_token()
+    for _ in range(10):
+        try:
+            conn.execute(
+                'INSERT INTO users (email, status, token, timestamp, picture_url) VALUES (?, ?, ?, ?, ?)',
+                (email, status, token, int(time()), picture_url),
+            )
+            return token
+        except sqlite3.IntegrityError:
+            if conn.execute('SELECT 1 FROM users WHERE email = ?', (email,)).fetchone():
+                return None
+            if not conn.execute('SELECT 1 FROM users WHERE token = ?', (token,)).fetchone():
+                raise
+            token = generate_token()
+    raise RuntimeError("Could not generate a unique device token after 10 attempts.")
+
+
 def is_valid_email(email):
     pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
     return bool(re.match(pattern, email))
@@ -92,50 +122,46 @@ def init_db():
         with sqlite3.connect(DB_FILE) as conn:
             conn.execute('BEGIN IMMEDIATE')
             init_recipient_history(conn)
+            ensure_unique_tokens(conn)
             columns = {row[1] for row in conn.execute('PRAGMA table_info(users)')}
             if 'picture_url' not in columns:
                 conn.execute('ALTER TABLE users ADD COLUMN picture_url TEXT')
         return
 
-    try:
-        with sqlite3.connect(DB_FILE) as conn:
-            create_table_sql_query = """
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    email TEXT UNIQUE NOT NULL,
-                    status TEXT NOT NULL,
-                    token TEXT,
-                    timestamp INTEGER,
-                    picture_url TEXT
-                )
-            """
-            cursor = conn.cursor()
-            cursor.execute(create_table_sql_query)
-            init_recipient_history(conn)
-            conn.commit()
-
-            token = generate_token()
-            add_admin_sql_query = f"INSERT INTO users (email, status, token, timestamp) VALUES ('{ADMIN_EMAIL}', 'admin', '{token}', '{int(time())}')"
-            cursor.execute(add_admin_sql_query)
-
-            conn.commit()
-
-            body = (f"You have been added as Admin of QuickMail service."
-                    f"\nYour token is: {token}"
-                    f"\n\nTo send an e-mail, you can use the following URL example:\n"
-                    f'http://quickmail.yourdomain.com/send?token={token}&msg="Some test message"&to=recipient_email&sub="Test mail subject"'
-                    f"\n\nYou can also use a POST request with parameters in the request body."
-                    f'\nThe "to" and "sub" parameters are required.'
-                    f"\nYou must wait at least {MIN_WAIT_TIME} seconds between emails."
-                    )
-
-            send_email(
-                recipient=ADMIN_EMAIL,
-                subject="Your Admin Credentials",
-                body=body
+    with sqlite3.connect(DB_FILE) as conn:
+        create_table_sql_query = """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                status TEXT NOT NULL,
+                token TEXT,
+                timestamp INTEGER,
+                picture_url TEXT
             )
-    except sqlite3.Error:
-        pass
+        """
+        cursor = conn.cursor()
+        cursor.execute(create_table_sql_query)
+        init_recipient_history(conn)
+        ensure_unique_tokens(conn)
+
+        token = insert_user(conn, ADMIN_EMAIL, 'admin')
+
+        conn.commit()
+
+        body = (f"You have been added as Admin of QuickMail service."
+                f"\nYour token is: {token}"
+                f"\n\nTo send an e-mail, you can use the following URL example:\n"
+                f'http://quickmail.yourdomain.com/send?token={token}&msg="Some test message"&to=recipient_email&sub="Test mail subject"'
+                f"\n\nYou can also use a POST request with parameters in the request body."
+                f'\nThe "to" and "sub" parameters are required.'
+                f"\nYou must wait at least {MIN_WAIT_TIME} seconds between emails."
+                )
+
+        send_email(
+            recipient=ADMIN_EMAIL,
+            subject="Your Admin Credentials",
+            body=body
+        )
 
 
 def get_user_from_db(email=None, token=None, exclude=None, include_pending=False):
@@ -176,18 +202,9 @@ def get_user_from_db(email=None, token=None, exclude=None, include_pending=False
             return [dict(row) for row in data]  # Convert each row to dict
 
 
-def add_user(email, token, picture_url=None):
+def add_user(email, token=None, picture_url=None):
     with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute("INSERT INTO users (email, status, token, timestamp, picture_url) VALUES (?, ?, ?, ?, ?)",
-                           (email, "pending", token, int(time()), picture_url))
-            conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            pass
-
-    return False
+        return insert_user(conn, email, 'pending', token, picture_url) is not None
 
 
 def delete_user(email):

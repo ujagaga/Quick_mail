@@ -3,7 +3,7 @@ import os
 import secrets
 from flask import Flask, request, render_template, flash, redirect, abort, session
 from config import ADMIN_EMAIL, FLASK_APP_SECRET_KEY, CLIENT_SECRETS_FILE, USE_MANUAL_OAUTH
-from helper import (send_email, generate_token, is_valid_email, init_db, get_user_from_db,
+from helper import (send_email, is_valid_email, init_db, get_user_from_db,
                     add_user, delete_user, update_user, update_user_picture, MIN_WAIT_TIME,
                     reserve_recipients, reset_recipients, MAX_RECIPIENTS)
 import json
@@ -100,8 +100,7 @@ def oauth2callback():
 
     user = get_user_from_db(email=email, include_pending=True)
     if not user:
-        token = generate_token()
-        add_user(email, token, picture_url)
+        add_user(email, picture_url=picture_url)
         send_email(
             recipient=ADMIN_EMAIL,
             subject="New user signed up",
