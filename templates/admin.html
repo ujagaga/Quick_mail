@@ -21,7 +21,7 @@
             <th scope="col">Email address</th>
             <th scope="col">Recipients used</th>
             <th scope="col">Access level</th>
-            <th scope="col">Action</th>
+            <th scope="col"><span class="sr-only">Action</span></th>
         </tr>
         </thead>
         <tbody>{% for account in users %}
@@ -35,12 +35,12 @@
                 </div>
             </td>
             <td>
-                <span>{{ account.recipient_count }} / {{ max_recipients }}</span>
-                <form method="POST" action="/admin">
+                <form class="recipient-controls" method="POST" action="/admin">
+                    <span>{{ account.recipient_count }} / {{ max_recipients }}</span>
                     <input type="hidden" name="email" value="{{ account.email }}">
                     <input type="hidden" name="cmd" value="reset_recipients">
                     <input type="hidden" name="csrf_token" value="{{ session.admin_csrf_token }}">
-                    <button class="button" type="submit" aria-label="Reset recipients for {{ account.email }}">Reset recipients</button>
+                    <button class="button recipient-reset" type="submit" title="Reset recipients" aria-label="Reset recipients for {{ account.email }}"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i></button>
                 </form>
             </td>
             <td>

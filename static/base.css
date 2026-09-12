@@ -624,7 +624,34 @@ code,pre {
 }
 
 .user-table th:last-child,.user-table td:last-child {
+    width:1%;
+    padding-inline:12px;
+    white-space:nowrap;
     text-align:right;
+}
+
+.recipient-controls {
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    margin:0;
+    white-space:nowrap;
+}
+
+.recipient-reset {
+    width:30px;
+    height:30px;
+    padding:0;
+    color:var(--accent);
+}
+
+.recipient-reset:hover {
+    background:#f3f2ff;
+}
+
+.recipient-reset:focus-visible {
+    outline:2px solid var(--accent);
+    outline-offset:2px;
 }
 
 .user-identity {
