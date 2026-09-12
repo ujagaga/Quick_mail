@@ -38,3 +38,19 @@ A common pitfall is that this script must be executable, so:
 ## TODO
 
 - Make sure token is unique
+
+## Recipient limits and resets
+
+Each account can use up to **10 distinct recipient addresses** between administrator resets. Addresses are stored in SQLite and counted case-insensitively. Repeated addresses in the same request receive only one email.
+
+Once all 10 slots are used, previously used recipients remain allowed. A GET or form POST request to `/send` that would exceed the limit returns HTTP `403` before sending any emails or adding any recipients from that request. This also applies to multi-recipient requests and concurrent requests. Failed SMTP delivery attempts retain their recipient slots.
+
+The `/admin` users page shows each account's recipient count (for example, `3 / 10`). Its **Reset recipients** button clears that account's stored list and restores all 10 slots. Only administrators can reset recipients; the account's token, role, and sending cooldown are preserved.
+
+Existing databases are upgraded automatically. Recipient history starts empty because older versions did not record recipients. Deleting an account also deletes its recipient history.
+
+Run the recipient tests with:
+
+```bash
+python3 -m unittest discover -s tests -v
+```

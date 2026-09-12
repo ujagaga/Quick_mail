@@ -19,6 +19,7 @@
         <thead>
         <tr>
             <th scope="col">Email address</th>
+            <th scope="col">Recipients used</th>
             <th scope="col">Access level</th>
             <th scope="col">Action</th>
         </tr>
@@ -32,6 +33,15 @@
                     </span>
                     <span>{{ account.email }}</span>
                 </div>
+            </td>
+            <td>
+                <span>{{ account.recipient_count }} / {{ max_recipients }}</span>
+                <form method="POST" action="/admin">
+                    <input type="hidden" name="email" value="{{ account.email }}">
+                    <input type="hidden" name="cmd" value="reset_recipients">
+                    <input type="hidden" name="csrf_token" value="{{ session.admin_csrf_token }}">
+                    <button class="button" type="submit" aria-label="Reset recipients for {{ account.email }}">Reset recipients</button>
+                </form>
             </td>
             <td>
                 <form method="GET" action="/admin">

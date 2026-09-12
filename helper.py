@@ -8,6 +8,8 @@ from time import time
 import os
 import uuid
 
+MAX_RECIPIENTS = 10
+
 MIN_WAIT_TIME = max(_CONFIGURED_MIN_WAIT_TIME, 120)  # enforce a 2min floor regardless of config
 
 '''
@@ -46,10 +48,50 @@ def is_valid_email(email):
     return bool(re.match(pattern, email))
 
 
+def init_recipient_history(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_recipients (
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            recipient TEXT NOT NULL COLLATE NOCASE,
+            PRIMARY KEY (user_id, recipient)
+        )
+    """)
+
+
+def reserve_recipients(user_id, recipients):
+    """Reserve the entire batch before SMTP, including failed delivery attempts.
+
+    The write lock prevents concurrent requests from exceeding the account limit.
+    """
+    recipients = {recipient.strip().lower() for recipient in recipients}
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute('PRAGMA foreign_keys = ON')
+        conn.execute('BEGIN IMMEDIATE')
+        existing = {row[0] for row in conn.execute(
+            'SELECT recipient FROM user_recipients WHERE user_id = ?', (user_id,)
+        )}
+        if len(existing | recipients) > MAX_RECIPIENTS:
+            return False
+        conn.executemany(
+            'INSERT INTO user_recipients (user_id, recipient) VALUES (?, ?)',
+            [(user_id, recipient) for recipient in recipients - existing],
+        )
+    return True
+
+
+def reset_recipients(email):
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.execute(
+            'DELETE FROM user_recipients WHERE user_id = (SELECT id FROM users WHERE email = ?)',
+            (email,),
+        )
+
+
 def init_db():
     if os.path.exists(DB_FILE):
         with sqlite3.connect(DB_FILE) as conn:
             conn.execute('BEGIN IMMEDIATE')
+            init_recipient_history(conn)
             columns = {row[1] for row in conn.execute('PRAGMA table_info(users)')}
             if 'picture_url' not in columns:
                 conn.execute('ALTER TABLE users ADD COLUMN picture_url TEXT')
@@ -69,6 +111,7 @@ def init_db():
             """
             cursor = conn.cursor()
             cursor.execute(create_table_sql_query)
+            init_recipient_history(conn)
             conn.commit()
 
             token = generate_token()
@@ -117,6 +160,12 @@ def get_user_from_db(email=None, token=None, exclude=None, include_pending=False
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row  # Enables dictionary-like row access
         cursor = conn.cursor()
+        sql_query = sql_query.replace(
+            'SELECT * FROM users',
+            'SELECT users.*, (SELECT COUNT(*) FROM user_recipients '
+            'WHERE user_id = users.id) AS recipient_count FROM users',
+            1,
+        )
         cursor.execute(sql_query, params)
 
         if one:
@@ -144,7 +193,8 @@ def add_user(email, token, picture_url=None):
 def delete_user(email):
     with sqlite3.connect(DB_FILE) as conn:
         cursor = conn.cursor()
-        cursor.execute(f"DELETE FROM users WHERE email = '{email}'")
+        conn.execute("PRAGMA foreign_keys = ON")
+        cursor.execute("DELETE FROM users WHERE email = ?", (email,))
         conn.commit()
 
 

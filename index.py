@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import os
+import secrets
 from flask import Flask, request, render_template, flash, redirect, abort, session
 from config import ADMIN_EMAIL, FLASK_APP_SECRET_KEY, CLIENT_SECRETS_FILE, USE_MANUAL_OAUTH
 from helper import (send_email, generate_token, is_valid_email, init_db, get_user_from_db,
-                    add_user, delete_user, update_user, update_user_picture, MIN_WAIT_TIME)
+                    add_user, delete_user, update_user, update_user_picture, MIN_WAIT_TIME,
+                    reserve_recipients, reset_recipients, MAX_RECIPIENTS)
 import json
 from time import time
 
@@ -163,9 +165,12 @@ def send():
         abort(400, description='Missing subject as "sub" parameter')
 
     accepted_recipients, rejected_recipients = [], []
+    seen_recipients = set()
     for r in [r.strip() for r in recipient.split(",")]:
         if is_valid_email(r):
-            accepted_recipients.append(r)
+            if r.lower() not in seen_recipients:
+                accepted_recipients.append(r)
+                seen_recipients.add(r.lower())
         else:
             rejected_recipients.append(r)
 
@@ -173,6 +178,10 @@ def send():
 
     if not accepted_recipients:
         abort(400, description=f"No valid recipients found. Rejected: {json.dumps(rejected_recipients)}")
+
+    if not reserve_recipients(user["id"], accepted_recipients):
+        abort(403, description=f"Recipient limit reached: each account may use at most "
+                               f"{MAX_RECIPIENTS} distinct recipients. Use previously used recipients.")
 
     # Send emails
     for r in accepted_recipients:
@@ -186,12 +195,27 @@ def send():
     return ret_message
 
 
-@app.route("/admin", methods=["GET"])
+@app.route("/admin", methods=["GET", "POST"])
 def admin():
     administrator = check_auth()
 
     if not administrator or administrator['status'] != 'admin':
         return redirect('/login')
+
+    if request.method == 'POST':
+        csrf_token = session.get('admin_csrf_token')
+        if not csrf_token or not secrets.compare_digest(
+            csrf_token, request.form.get('csrf_token', '')
+        ):
+            abort(400, description="Invalid form token. Reload the users page and try again.")
+        if request.form.get('cmd') != 'reset_recipients' or not request.form.get('email'):
+            abort(400, description="Invalid recipient reset request.")
+        reset_recipients(request.form['email'])
+        flash("Recipient history cleared.")
+        return redirect('/admin')
+
+    if 'admin_csrf_token' not in session:
+        session['admin_csrf_token'] = secrets.token_hex(32)
 
     email = request.args.get('email')
     command = request.args.get('cmd')
@@ -227,7 +251,7 @@ def admin():
         return redirect('/admin')
 
     users = get_user_from_db(exclude=administrator['email'])
-    return render_template('admin.html', authorized=True, user=administrator, users=users)
+    return render_template('admin.html', authorized=True, user=administrator, users=users, max_recipients=MAX_RECIPIENTS)
 
 
 if __name__ == "__main__":
