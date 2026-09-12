@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 import os
 from flask import Flask, request, render_template, flash, redirect, abort, session, send_file
-from config import ADMIN_EMAIL, FLASK_APP_SECRET_KEY, MAX_RECIPIENT_HISTORY, MIN_TIMEOUT, CLIENT_SECRETS_FILE
+from config import (ADMIN_EMAIL, FLASK_APP_SECRET_KEY, MAX_RECIPIENT_HISTORY, MIN_TIMEOUT, CLIENT_SECRETS_FILE,
+                    USE_MANUAL_OAUTH)
 from helper import (send_email, generate_captcha_text, generate_token, is_valid_email, init_db, get_user_from_db,
                     add_user, delete_user, update_user)
 import json
 from captcha.image import ImageCaptcha
 import io
 from time import time
-from authlib.integrations.flask_client import OAuth
 
 app = Flask(__name__)
 # app.config["APPLICATION_ROOT"] = "/cgi-bin/cgi_serve.py"
@@ -23,21 +23,27 @@ google = None
 client_secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CLIENT_SECRETS_FILE)
 if os.path.isfile(client_secrets_path):
     try:
-        with open(client_secrets_path) as f:
-            client_secrets = json.load(f)['web']
+        if USE_MANUAL_OAUTH:
+            from manual_oauth import ManualGoogleOAuth
+            google = ManualGoogleOAuth(client_secrets_path)
+        else:
+            from authlib.integrations.flask_client import OAuth
 
-        oauth = OAuth(app)
-        google = oauth.register(
-            name='google',
-            client_id=client_secrets['client_id'],
-            client_secret=client_secrets['client_secret'],
-            access_token_url=client_secrets['token_uri'],
-            authorize_url=client_secrets['auth_uri'],
-            api_base_url='https://www.googleapis.com/oauth2/v1/',
-            userinfo_endpoint='https://www.googleapis.com/oauth2/v3/userinfo',
-            client_kwargs={'scope': 'email'},
-            server_metadata_url='https://accounts.google.com/.well-known/openid-configuration'
-        )
+            with open(client_secrets_path) as f:
+                client_secrets = json.load(f)['web']
+
+            oauth = OAuth(app)
+            google = oauth.register(
+                name='google',
+                client_id=client_secrets['client_id'],
+                client_secret=client_secrets['client_secret'],
+                access_token_url=client_secrets['token_uri'],
+                authorize_url=client_secrets['auth_uri'],
+                api_base_url='https://www.googleapis.com/oauth2/v1/',
+                userinfo_endpoint='https://www.googleapis.com/oauth2/v3/userinfo',
+                client_kwargs={'scope': 'email'},
+                server_metadata_url='https://accounts.google.com/.well-known/openid-configuration'
+            )
     except Exception as e:
         print(f"Failed to register Google OAuth: {e}")
 
