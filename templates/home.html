@@ -11,10 +11,13 @@
             </div>
         {% endif %}
         {% endwith %}
+        {% if authorized %}
+        <p>Your device token: <strong>{{ user.token }}</strong></p>
+        {% endif %}
     </div>
     <div class="story">
         <h1>How It Works</h1>
-        <p>Once you submit your e-mail, you will receive a response with your designated token.<br>
+        <p>Sign in with Google to get your device token.<br>
             To send an e-mail, you simply make an HTTP GET or HTTP POST request to <br>"{{ request.url.replace("/cgi-bin/cgi_serve.py", "") }}send" with parameters:</p>
         <ul>
             <li>token=&lt;Your user token&gt;</li>

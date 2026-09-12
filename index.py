@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
+import os
 from flask import Flask, request, render_template, flash, redirect, abort, session, send_file
-from config import ADMIN_EMAIL, FLASK_APP_SECRET_KEY, MAX_RECIPIENT_HISTORY, MIN_TIMEOUT
+from config import ADMIN_EMAIL, FLASK_APP_SECRET_KEY, MAX_RECIPIENT_HISTORY, MIN_TIMEOUT, CLIENT_SECRETS_FILE
 from helper import (send_email, generate_captcha_text, generate_token, is_valid_email, init_db, get_user_from_db,
-                    add_user, delete_user, update_user, get_pending_user_count)
+                    add_user, delete_user, update_user)
 import json
 from captcha.image import ImageCaptcha
 import io
 from time import time
+from authlib.integrations.flask_client import OAuth
 
 app = Flask(__name__)
 # app.config["APPLICATION_ROOT"] = "/cgi-bin/cgi_serve.py"
@@ -17,62 +19,99 @@ app.config.update(
     SESSION_COOKIE_SAMESITE='Lax',
 )
 
+google = None
+client_secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CLIENT_SECRETS_FILE)
+if os.path.isfile(client_secrets_path):
+    try:
+        with open(client_secrets_path) as f:
+            client_secrets = json.load(f)['web']
+
+        oauth = OAuth(app)
+        google = oauth.register(
+            name='google',
+            client_id=client_secrets['client_id'],
+            client_secret=client_secrets['client_secret'],
+            access_token_url=client_secrets['token_uri'],
+            authorize_url=client_secrets['auth_uri'],
+            api_base_url='https://www.googleapis.com/oauth2/v1/',
+            userinfo_endpoint='https://www.googleapis.com/oauth2/v3/userinfo',
+            client_kwargs={'scope': 'email'},
+            server_metadata_url='https://accounts.google.com/.well-known/openid-configuration'
+        )
+    except Exception as e:
+        print(f"Failed to register Google OAuth: {e}")
+
 
 def check_auth():
-    token = request.cookies.get('authToken')
-    if token:
-        user = get_user_from_db(token=token)
-        if user:
-            return True
-        else:
-            return False
+    email = session.get('email')
+    if email:
+        user = get_user_from_db(email=email)
+        if user and user['status'] != 'pending':
+            return user
+
+    return None
 
 
 @app.before_request
 def check_token():
     init_db()
-    excluded_routes = ['home', 'login', 'subscribe', 'static', 'send', 'generate_captcha', 'resend_token']  # Add routes to exclude
+    excluded_routes = ['home', 'login', 'authorize', 'oauth2callback', 'static', 'send', 'generate_captcha']  # Add routes to exclude
     if request.endpoint in excluded_routes:
-        return  # Skip checking the cookie
+        return  # Skip checking the session
 
     if not check_auth():
         return redirect(f"/login?next_url={request.endpoint}")
 
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/login", methods=["GET"])
 def login():
-    if request.method == "POST":
-        email = request.form.get("email")
-        token = request.form.get("token")
-
-        if email and token:
-            user = get_user_from_db(email=email)
-
-            if user["token"] == token:
-                next_url = request.form.get('next_url')
-                if next_url and next_url != 'None':
-                    target_url = next_url
-                else:
-                    target_url = "/"
-
-                response = redirect(target_url)
-                response.set_cookie("authToken", token, httponly=True, secure=True, samesite="Strict")
-                return response
-            else:
-                flash("Invalid email or token.")
-        else:
-            flash("Both email and password are necessary to login.")
-
-    next_url=request.args.get('next_url')
+    next_url = request.args.get('next_url')
     return render_template('login.html', hide_nav=True, next_url=next_url)
+
+
+@app.route("/authorize", methods=["GET"])
+def authorize():
+    next_url = request.args.get('next_url')
+    if next_url and next_url != 'None':
+        session['next_url'] = next_url
+
+    redirect_uri = f"{request.host_url}oauth2callback"
+    return google.authorize_redirect(redirect_uri)
+
+
+@app.route("/oauth2callback", methods=["GET"])
+def oauth2callback():
+    google.authorize_access_token()
+    email = google.get('userinfo').json()['email']
+
+    user = get_user_from_db(email=email)
+    if not user:
+        token = generate_token()
+        add_user(email, token)
+        send_email(
+            recipient=ADMIN_EMAIL,
+            subject="New user signed up",
+            body=f"New user: {email} signed up for quick mail service."
+                 f"\nApprove or remove: {request.host_url}admin"
+        )
+        flash("Account created. You will be contacted by the administrator as soon as possible.")
+        return redirect('/login')
+
+    if user['status'] == 'pending':
+        flash("Your account is still awaiting administrator approval.")
+        return redirect('/login')
+
+    session['email'] = email
+    next_url = session.pop('next_url', None)
+    target_url = f"/{next_url}" if next_url and next_url != 'None' else "/"
+
+    return redirect(target_url)
 
 
 @app.route("/logout", methods=["GET"])
 def logout():
-    response = redirect('/')
-    response.set_cookie('authToken', '', expires=0)
-
-    return response
+    session.clear()
+    return redirect('/')
 
 
 @app.route("/captcha")
@@ -88,59 +127,8 @@ def generate_captcha():
 
 @app.route("/", methods=["GET"])
 def home():
-    authorized = check_auth()
-    return render_template('home.html', authorized=authorized)
-
-
-@app.route("/subscribe", methods=["GET", "POST"])
-def subscribe():
-    show_subscribe = True
-    if request.method == "POST":
-        user_input = request.form.get("captcha")
-        if user_input and user_input.upper() == session.get("captcha"):
-            email = request.form.get("email")
-            if email:
-                if get_pending_user_count() > MAX_RECIPIENT_HISTORY:
-                    flash("Maximum number of pending users reached. Please try later.")
-                else:
-                    token = generate_token()
-                    if add_user(email, token):
-                        send_email(
-                            recipient=ADMIN_EMAIL,
-                            subject="New user signed up",
-                            body=f"New user: {email} signed up for quick mail service."
-                                 f"\nThe token generated for them is: {token}"
-                                 f"\nApprove or remove: {request.host_url}admin"
-                        )
-                        show_subscribe = False
-                        flash("Email submitted. You will be contacted by the administrator as soon as possible.")
-                    else:
-                        flash("This e-mail is already registered.")
-        else:
-            flash("Invalid CAPTCHA. Try again!")
-
-    return render_template('subscribe.html', show_subscribe=show_subscribe)
-
-
-@app.route("/resend_token", methods=["GET", "POST"])
-def resend_token():
-    show_submit = True
-    if request.method == "POST":
-        email = request.form.get("email")
-        if email:
-            user = get_user_from_db(email=email)
-            if user:
-                token = user["token"]
-
-                send_email(
-                    recipient=email,
-                    subject="Quick Mail Token",
-                    body=f"You requested for your Quick Mail Token: {token}"
-                )
-                show_submit = False
-                flash("Email submitted. If it is in our database, we will send you your token.")
-
-    return render_template('resend_token.html', show_submit=show_submit)
+    user = check_auth()
+    return render_template('home.html', authorized=bool(user), user=user)
 
 
 @app.route("/send", methods=["GET", "POST"])
@@ -203,11 +191,7 @@ def send():
 
 @app.route("/clear_history", methods=["GET", "POST"])
 def clear_history():
-    user = None
-    token = request.cookies.get('authToken')
-    if token:
-        user = get_user_from_db(token=token)
-
+    user = check_auth()
     if not user:
         return redirect('/login')
 
@@ -216,7 +200,7 @@ def clear_history():
         if user_input and user_input.upper() == session.get("captcha"):
             update_user(email=user["email"], recipients=[])
             flash("History cleared!")
-            user = get_user_from_db(token=token)
+            user = get_user_from_db(email=user["email"])
         else:
             flash("Invalid CAPTCHA. Try again!")
 
@@ -231,10 +215,7 @@ def clear_history():
 
 @app.route("/admin", methods=["GET"])
 def admin():
-    administrator = None
-    token = request.cookies.get('authToken')
-    if token:
-        administrator = get_user_from_db(token=token)
+    administrator = check_auth()
 
     if not administrator or administrator['status'] != 'admin':
         return redirect('/login')
@@ -249,10 +230,10 @@ def admin():
             update_user(email, status='approved')
             user = get_user_from_db(email=email)
             body = (f"You have been approved for using Quick Mail service."
-                    f"\nYour token is: {token}"
-                    f"\nYou may use it to login to {request.host_url}login"
+                    f"\nYour token is: {user['token']}"
+                    f"\nYou may now log in at {request.host_url}login with your Google account."
                     f"\n\nTo send an e-mail, you can use the following URL example:\n"
-                    f'{request.host_url}send?token={token}&msg="Some test message"&to={email}&sub="Test mail subject"'
+                    f'{request.host_url}send?token={user["token"]}&msg="Some test message"&to={email}&sub="Test mail subject"'
                     f"\n\nYou can also use a POST request with parameters in the request body."
                     f"\nOnce you send an e-mail, the recipient will be added to your recipient list. "
                     f'Up to {MAX_RECIPIENT_HISTORY} recipients will be saved, so if you omit the "to" parameter,'

@@ -14,22 +14,7 @@
         {% endif %}
         {% endwith %}
 
-        <form method="POST" action="/login">
-            <input type="hidden" name="next_url" value="{{next_url}}">
-            <div>
-                <div class="control">
-                    <input type="email" name="email" placeholder="Your Email" autofocus="">
-                </div>
-                <div class="control">
-                    <input type="text" name="token" placeholder="Your Token">
-                </div>
-            </div>
-            <button class="full-width">Submit</button>
-        </form>
-        <br>
-        <a class="hyperlink" href="/subscribe">No account? Subscribe here.</a>
-        <br>
-        <a class="hyperlink" href="/resend_token">Forgot token? Resend it.</a>
+        <a class="full-width" href="/authorize?next_url={{next_url}}">Sign in with Google</a>
     </div>
 </div>
 {% endblock %}

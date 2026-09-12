@@ -1,3 +1,5 @@
+Authlib
+requests
 blinker==1.9.0
 captcha==0.6.0
 click==8.1.8

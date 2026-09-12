@@ -31,9 +31,6 @@
                         {% endif %}
                         <a href="/logout" class="navbar-item">Log out</a>
                         {% else %}
-                        {% if request.endpoint != 'subscribe' %}
-                        <a href="/subscribe" class="navbar-item">Subscribe</a>
-                        {% endif %}
                         {% if request.endpoint != 'login' %}
                         <a href="/login" class="navbar-item">Log in</a>
                         {% endif %}
