@@ -191,12 +191,19 @@ def admin():
 
     email = request.args.get('email')
     command = request.args.get('cmd')
+    role = request.args.get('role')
 
-    if email and command:
-        if command == 'd':
-            delete_user(email)
-        else:
-            update_user(email, status='approved')
+    if email and command == 'd':
+        delete_user(email)
+        return redirect('/admin')
+
+    if email and role in ('pending', 'guest', 'admin'):
+        # get_user_from_db(email=...) filters out pending rows, so look through the full list instead
+        current = next((u for u in get_user_from_db() if u['email'] == email), None)
+        was_pending = current is not None and current['status'] == 'pending'
+        update_user(email, status=role)
+
+        if role == 'guest' and was_pending:
             user = get_user_from_db(email=email)
             body = (f"You have been approved for using Quick Mail service."
                     f"\nYour token is: {user['token']}"

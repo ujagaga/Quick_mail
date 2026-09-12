@@ -16,17 +16,26 @@
         <table class="user-edit-table">
             <tr>
                 <th>E-mail</th>
-                <th>Status</th>
+                <th>Role</th>
                 <th>Command</th>
             </tr>
             {% for user in users %}
             <tr>
                 <td>{{ user.email }}</td>
-                <td>{{ user.status }}</td>
                 <td>
-                    {% if user.status=='pending' %}
-                    <a href="/admin?email={{ user.email }}&cmd=a" class="okcmd">Approve</a>
-                    {% endif %}
+                    <form method="GET" action="/admin">
+                        <input type="hidden" name="email" value="{{ user.email }}">
+                        {% for role in ['pending', 'guest', 'admin'] %}
+                        <label>
+                            <input type="radio" name="role" value="{{ role }}"
+                                   {% if user.status==role %}checked{% endif %}
+                                   onchange="this.form.submit()">
+                            {{ role }}
+                        </label>
+                        {% endfor %}
+                    </form>
+                </td>
+                <td>
                     <a href="/admin?email={{ user.email }}&cmd=d" class="delcmd">Delete</a>
                 </td>
             </tr>
