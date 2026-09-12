@@ -70,6 +70,11 @@ def check_token():
 @app.route("/login", methods=["GET"])
 def login():
     next_url = request.args.get('next_url')
+
+    if not session.get('_flashes'):
+        # Nothing to tell the user, so skip the button and go straight to Google
+        return redirect(f"/authorize?next_url={next_url}")
+
     return render_template('login.html', hide_nav=True, next_url=next_url)
 
 
