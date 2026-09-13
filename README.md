@@ -52,12 +52,6 @@ Edit `config.py` before starting:
 | `FLASK_APP_SECRET_KEY` | Private random secret used to sign browser sessions. |
 | `MIN_WAIT_TIME` | Per-account sending delay in seconds; values below `120` are raised to `120`. |
 
-The example defines `USE_MANUAL_OAUTH` twice. Keep just one assignment with your chosen value. Generate a session secret with:
-
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
 The current mail helper authenticates over plain SMTP without STARTTLS or implicit TLS. Providers requiring TLS will not work with it, even on port `587`. Use a suitable trusted relay or add TLS support to the helper for those providers.
 
 ### Google sign-in
@@ -71,8 +65,7 @@ https://quickmail.example.com/oauth2callback
 ```
 
 The application builds the callback from the incoming request's scheme and host, so the hosting setup must expose the correct public URL. Google sign-in requires a valid client secrets file.
-
-Keep the configuration, OAuth credentials, database, and device tokens private. `config.py` and `*.db` are ignored by Git; `.venv/` and the client secrets JSON are not currently ignored and should not be committed.
+Keep the configuration, OAuth credentials, database, and device tokens private. They should not be committed.
 
 ## Run locally
 
@@ -84,13 +77,6 @@ python index.py
 
 Open `http://127.0.0.1:5000`. This starts Flask's development server with debug mode enabled.
 
-Browser sessions use secure cookies. To test Google sign-in over local HTTP, register `http://127.0.0.1:5000/oauth2callback` for the local setup and use this development-only command instead:
-
-```bash
-python -c "from index import app; app.config['SESSION_COOKIE_SECURE'] = False; app.run(debug=True)"
-```
-
-Keep secure cookies enabled for HTTPS deployments, and use a production hosting setup instead of the development server for public access.
 
 ### First run and account approval
 
@@ -98,7 +84,7 @@ Keep secure cookies enabled for HTTPS deployments, and use a production hosting 
 2. Sign in with the Google account matching `ADMIN_EMAIL`. The home page displays your token; `/admin` provides user administration.
 3. Other Google sign-ins create pending accounts and trigger an administrator notification. Pending accounts cannot use the sending API.
 4. Change a pending user's role to `guest` to approve them and email their token. The `admin` role also allows user management.
-5. Wait at least `MIN_WAIT_TIME` seconds after account creation, a role change, or the previous sending request before sending again.
+5. Wait at least `MIN_WAIT_TIME` (120 seconds) after account creation, a role change, or the previous sending request before sending again.
 
 The process needs write access to the database and its parent directory. Back up the database to preserve accounts, tokens, and recipient histories. Changing `ADMIN_EMAIL` does not replace the administrator in an existing database.
 
@@ -161,13 +147,6 @@ After all 10 slots are used, the account can still send to previously used addre
 
 The `/admin` users page displays each account's count, such as `3 / 10`. The small reset icon beside it, labelled **Reset recipients**, clears that account's list and restores all 10 slots. Only administrators can reset histories. Resetting preserves the account's token, role, and sending cooldown. Deleting an account also deletes its recipient history.
 
-Existing databases are upgraded automatically. Older recipients cannot be recovered because earlier versions did not record them, so those accounts begin with empty histories.
-
-## Token uniqueness
-
-Device tokens use UUIDv4. A SQLite unique index guarantees that two accounts cannot store the same token. Account creation, including the initial administrator, retries token collisions with a limit of 10 attempts.
-
-Existing databases receive the unique index automatically without changing valid tokens. If a legacy database contains duplicate tokens, startup fails with an explicit error. Resolve the duplicated credentials before restarting; the migration does not silently replace device tokens.
 
 ## Hosting
 
@@ -180,31 +159,3 @@ from index import app as application
 ```
 
 Use HTTPS and the public OAuth callback. Serve the application at the domain root because links and redirects use root-relative paths such as `/login`, `/admin`, and `/send`. Use Authlib for concurrent WSGI hosting.
-
-### CGI
-
-`cgi_serve.py` runs the application through Python's `CGIHandler`.
-
-1. Install dependencies in the Python environment used by the script.
-2. Upload the application, templates, static files, configuration, and OAuth credentials.
-3. Make the entry script executable:
-
-   ```bash
-   chmod +x cgi_serve.py
-   ```
-
-4. Ensure the shebang selects the interpreter containing the dependencies; use its absolute path if necessary.
-5. Configure root application paths to reach the CGI entry script and serve `/static/`. Visiting `/cgi-bin/cgi_serve.py` alone does not provide the root paths required by links and the OAuth callback.
-6. Enable HTTPS and allow the process to write the database directory.
-
-## Code overview
-
-| File | Responsibility |
-| --- | --- |
-| `index.py` | Flask routes, Google sign-in, sending API, and administration. |
-| `helper.py` | SMTP delivery, token creation, database migrations, user operations, and recipient limits. |
-| `manual_oauth.py` | Optional requests-based Google OAuth client. |
-| `cgi_serve.py` | CGI entry point. |
-| `config.py.example` | Configuration template. |
-| `requirements.txt` | Standard Python dependency list. |
-| `templates/`, `static/` | Web interface, styles, fonts, and favicon. |

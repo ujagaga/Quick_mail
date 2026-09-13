@@ -8,7 +8,6 @@ ADMIN_EMAIL = "administrator_email_to_be_notified_of_new_accounts"
 
 DB_FILE = "users.db"
 CLIENT_SECRETS_FILE = "client_secret.json"  # Google OAuth client secrets, download from Google Cloud Console
-USE_MANUAL_OAUTH = False  # True uses manual_oauth.py (only needs "requests") instead of Authlib (needs "cryptography")
-FLASK_APP_SECRET_KEY = "9OLWxND4o83j4K4iuopOdsfds_any_random_string"
+USE_MANUAL_OAUTH = True  # True uses manual_oauth.py (only needs "requests") instead of Authlib (needs "cryptography")
+FLASK_APP_SECRET_KEY = "9OLWxND4o83j4K_any_random_string"
 MIN_WAIT_TIME = 120    # Minimum seconds between emails from the same user to prevent spamming (enforced floor: 120s / 2min)
-USE_MANUAL_OAUTH = True
