@@ -1,6 +1,5 @@
 .idea
-config.py
+token.json
 __pycache__
-*.db
 .venv
 client_secret.json
